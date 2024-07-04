@@ -40,6 +40,7 @@
 #include "threads_mngr.h"
 #include "fmtargs.h"
 
+#include <stdint.h>
 #include <time.h>
 #include <signal.h>
 #include <sys/wait.h>
@@ -322,6 +323,28 @@ uint64_t dictObjHash(const void *key) {
     return dictGenHashFunction(o->ptr, sdslen((sds)o->ptr));
 }
 
+void resetClientCacheHashFlag(void) {
+    if (server.current_client && server.current_client->flag.cachedhash) {
+        server.current_client->flag.cachedhash = 0;
+    }
+}
+
+uint64_t dbSdsHash(const void *key) {
+    uint64_t hash = 0;
+    if (server.current_client && server.current_client->flag.executing_command) {
+        if (!server.current_client->flag.cachedhash) {
+            hash = dictSdsHash(key);
+            server.current_client->dbKeyHash = hash;
+            server.current_client->flag.cachedhash = 1;
+        } else {
+            hash = server.current_client->dbKeyHash;
+        }
+    } else {
+        hash = dictSdsHash(key);
+    }
+    return hash;
+}
+
 uint64_t dictSdsHash(const void *key) {
     return dictGenHashFunction((unsigned char *)key, sdslen((char *)key));
 }
@@ -465,7 +488,7 @@ dictType zsetDictType = {
 
 /* Db->dict, keys are sds strings, vals are Objects. */
 dictType dbDictType = {
-    dictSdsHash,          /* hash function */
+    dbSdsHash,            /* hash function */
     NULL,                 /* key dup */
     dictSdsKeyCompare,    /* key compare */
     dictSdsDestructor,    /* key destructor */
@@ -475,7 +498,7 @@ dictType dbDictType = {
 
 /* Db->expires */
 dictType dbExpiresDictType = {
-    dictSdsHash,       /* hash function */
+    dbSdsHash,         /* hash function */
     NULL,              /* key dup */
     dictSdsKeyCompare, /* key compare */
     NULL,              /* key destructor */
@@ -3450,6 +3473,7 @@ void call(client *c, int flags) {
 
     /* Clear the CLIENT_REPROCESSING_COMMAND flag after the proc is executed. */
     if (reprocessing_command) c->flag.reprocessing_command = 0;
+    resetClientCacheHashFlag();
 
     exitExecutionUnit();
 

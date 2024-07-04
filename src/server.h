@@ -36,6 +36,7 @@
 #include "rio.h"
 #include "commands.h"
 
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
@@ -131,7 +132,8 @@ struct hdr_histogram;
 #define CONFIG_BGSAVE_RETRY_DELAY 5              /* Wait a few secs before trying again. */
 #define CONFIG_DEFAULT_PID_FILE "/var/run/valkey.pid"
 #define CONFIG_DEFAULT_BINDADDR_COUNT 2
-#define CONFIG_DEFAULT_BINDADDR {"*", "-::*"}
+#define CONFIG_DEFAULT_BINDADDR                                                                                        \
+    { "*", "-::*" }
 #define NET_HOST_STR_LEN 256                          /* Longest valid hostname */
 #define NET_IP_STR_LEN 46                             /* INET6_ADDRSTRLEN is 46, but we need to be sure */
 #define NET_ADDR_STR_LEN (NET_IP_STR_LEN + 32)        /* Must be enough for ip:port */
@@ -1173,7 +1175,8 @@ typedef struct ClientFlags {
     uint64_t reprocessing_command : 1;     /* The client is re-processing the command. */
     uint64_t replication_done : 1;         /* Indicate that replication has been done on the client */
     uint64_t authenticated : 1;            /* Indicate a client has successfully authenticated */
-    uint64_t reserved : 11;                /* Reserved for future use */
+    uint64_t cachedhash : 1;
+    uint64_t reserved : 10; /* Reserved for future use */
 } ClientFlags;
 
 typedef struct client {
@@ -1307,6 +1310,8 @@ typedef struct client {
     unsigned long long net_input_bytes;    /* Total network input bytes read from this client. */
     unsigned long long net_output_bytes;   /* Total network output bytes sent to this client. */
     unsigned long long commands_processed; /* Total count of commands this client executed. */
+
+    uint64_t dbKeyHash;
 } client;
 
 /* ACL information */
@@ -1477,7 +1482,8 @@ typedef struct rdbSaveInfo {
     long long repl_offset;                /* Replication offset. */
 } rdbSaveInfo;
 
-#define RDB_SAVE_INFO_INIT {-1, 0, "0000000000000000000000000000000000000000", -1}
+#define RDB_SAVE_INFO_INIT                                                                                             \
+    { -1, 0, "0000000000000000000000000000000000000000", -1 }
 
 struct malloc_stats {
     size_t zmalloc_used;
@@ -3527,6 +3533,8 @@ int performEvictions(void);
 void startEvictionTimeProc(void);
 
 /* Keys hashing / comparison functions for dict.c hash tables. */
+void resetClientCacheHashFlag(void);
+uint64_t dbSdsHash(const void *key);
 uint64_t dictSdsHash(const void *key);
 uint64_t dictSdsCaseHash(const void *key);
 int dictSdsKeyCompare(dict *d, const void *key1, const void *key2);
