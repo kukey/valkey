@@ -331,7 +331,8 @@ void resetClientCacheHashFlag(void) {
 
 uint64_t dbSdsHash(const void *key) {
     uint64_t hash = 0;
-    if (server.current_client && server.current_client->flag.executing_command) {
+    if (server.current_client && server.current_client->flag.executing_command &&
+        server.current_client->cmd->arity > 0) {
         if (!server.current_client->flag.cachedhash) {
             hash = dictSdsHash(key);
             server.current_client->dbKeyHash = hash;
